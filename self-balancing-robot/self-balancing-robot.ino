@@ -8,21 +8,25 @@
 # define LMotor_DIG 6
 # define LMotor_PWM 7
 
-# define Kp 40
-# define Ki 40
+# define Kp 20
+# define Ki 50
 # define Kd 0.01
 # define sampleTime 0.005
-# define targetAngle 0.5
+# define targetAngle 1.5
 
 MPU6050 mpu;
 
 int16_t ACC_Y, ACC_Z, GYRO_X;
 volatile int motorPower, gyroRate;
-volatile float accAngle, gyroAngle, currentAngle, prevAngle = 0;
+volatile float accAngle, gyroAngle, currentAngle, prevAngle = 1;
 volatile float error, prevError = 0, errorSum = 0;
 volatile byte count = 0;
 
 void setMotor(int LMSpeed, int RMSpeed){
+  cli();
+  LMSpeed = constrain(LMSpeed, -255, 255);
+  RMSpeed = constrain(RMSpeed, -255, 255);
+  Serial.println(LMSpeed);
   if(LMSpeed >= 0) {
     analogWrite(LMotor_PWM, LMSpeed);
     digitalWrite(LMotor_DIG, LOW);
@@ -38,7 +42,8 @@ void setMotor(int LMSpeed, int RMSpeed){
   else {
     analogWrite(RMotor_PWM, 255 + RMSpeed);
     digitalWrite(RMotor_DIG, HIGH);
-  }  
+  }
+  sei();
 }
 
 void setTimer(){
@@ -81,20 +86,19 @@ void loop() {
   ACC_Z = mpu.getAccelerationZ();
   GYRO_X = mpu.getRotationX();  
 
-  motorPower = constrain(motorPower, -255, 255);
   setMotor(motorPower, motorPower);
 }
 
 ISR(TIMER1_COMPA_vect){
-  accAngle = atan2(ACC_Y, ACC_Z)*RAD_TO_DEG;
+  accAngle = atan2(ACC_Y, ACC_Z) * RAD_TO_DEG;
   gyroRate = map(GYRO_X, -32768, 32767, -250, 250);
-  gyroAngle = (float)gyroRate*sampleTime;
-  currentAngle = 0.9934*(prevAngle + gyroAngle) + 0.0066*(accAngle);
+  gyroAngle = (float) gyroRate * sampleTime;
+  currentAngle = 0.9934 * (prevAngle + gyroAngle) + 0.0066 * (accAngle); // complementary filter
 
   error = currentAngle - targetAngle;
   errorSum = errorSum + error;  
   errorSum = constrain(errorSum, -300, 300);
   //calculate output from P, I and D values
-  motorPower = Kp*(error) + Ki*(errorSum)*sampleTime - Kd*(currentAngle-prevAngle)/sampleTime;
+  motorPower = Kp * (error) + Ki * (errorSum) * sampleTime - Kd * (currentAngle - prevAngle) / sampleTime;
   prevAngle = currentAngle;
 }
